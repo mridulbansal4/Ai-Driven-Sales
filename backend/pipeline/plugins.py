@@ -58,13 +58,14 @@ class LocalWhisperSTT(stt.STT):
         conn_options: APIConnectOptions,
     ) -> SpeechEvent:
         frame = combine_frames(buffer)
+        processor = self._processor_or_load()
         text = await asyncio.to_thread(
-            self._processor_or_load().transcribe, frame.data.tobytes()
+            processor.transcribe, frame.data.tobytes()
         )
-        logger.info('Heard: %r', text)
+        logger.info('Heard (%s): %r', processor.last_language, text)
         return SpeechEvent(
             type=SpeechEventType.FINAL_TRANSCRIPT,
-            alternatives=[SpeechData(language='en', text=text or '')],
+            alternatives=[SpeechData(language=processor.last_language, text=text or '')],
         )
 
 

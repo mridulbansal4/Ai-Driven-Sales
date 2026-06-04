@@ -31,6 +31,7 @@ class STTProcessor:
         self.model = WhisperModel(
             model_size, device=device, compute_type=compute_type
         )
+        self.last_language = 'en'  # language Whisper detected on the last transcribe
         self._initialized = True
 
     def transcribe(self, audio_bytes: bytes) -> str | None:
@@ -55,6 +56,7 @@ class STTProcessor:
             vad_filter=False,
         )
         transcript = ''.join(seg.text for seg in segments).strip()
+        self.last_language = info.language
 
         logger.info(
             "STT detected language=%s (probability=%.3f)",

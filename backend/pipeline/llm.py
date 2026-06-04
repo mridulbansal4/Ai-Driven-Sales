@@ -1,8 +1,18 @@
 import os
+import re
 import logging
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Replies that mean the model broke character.
+_OUT_OF_CHARACTER = re.compile(
+    r"language model|as an ai|i'?m an ai|openai|assistant here to help|"
+    r"i cannot|i can't help|how can i assist",
+    re.IGNORECASE,
+)
+
+_FALLBACK = "I'm not sure I follow — could you explain that again in simpler terms?"
 
 
 class LLMProcessor:
@@ -18,42 +28,58 @@ class LLMProcessor:
         if self._initialized:
             return
         self.ollama_url = os.getenv('OLLAMA_URL', 'http://localhost:11434')
-        self.model = os.getenv('OLLAMA_MODEL', 'qwen2.5-coder:7b')
-        self.system_prompt = (
-            "You are a hesitant banking customer considering a home loan. "
-            "You have concerns about interest rates and monthly EMIs. "
-            "Keep responses short — maximum 2-3 sentences. "
-            "Stay in character at all times.\n\n"
-            "IMPORTANT — Language rule: "
-            "Detect the language the user spoke in (Hindi or English). "
-            "If the user spoke in Hindi (or Hinglish), reply ONLY in Hindi (Devanagari script). "
-            "If the user spoke in English, reply ONLY in English. "
-            "Never mix scripts in a single reply. "
-            "Do not translate the user's message — just respond naturally in the same language."
-        )
+        self.model = (os.getenv('OLLAMA_MODEL') or 'qwen2.5:7b').strip()
+        if not self.model:
+            self.model = 'qwen2.5:7b'
         self._initialized = True
 
-    async def generate_full(self, user_text: str, system_prompt: str = None) -> str:
-        prompt = system_prompt if system_prompt is not None else self.system_prompt
-        return await self.generate_messages([
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": user_text},
-        ])
+    def _build_messages(self, messages: list[dict]) -> list[dict]:
+        system_parts: list[str] = []
+        conversation: list[dict] = []
 
-    async def generate_messages(self, messages: list[dict]) -> str:
-        normalized = []
         for msg in messages:
             role = msg.get('role', 'user')
             if role == 'developer':
                 role = 'system'
             content = (msg.get('content') or '').strip()
-            if content:
-                normalized.append({'role': role, 'content': content})
+            if not content:
+                continue
+            if role == 'system':
+                system_parts.append(content)
+            elif role in ('user', 'assistant'):
+                conversation.append({'role': role, 'content': content})
 
-        if not any(m['role'] == 'system' for m in normalized):
-            normalized.insert(0, {'role': 'system', 'content': self.system_prompt})
+        if not system_parts:
+            system_parts.append(
+                "You are a banking customer. The user is the bank officer. "
+                "Stay in character. Reply in 2-3 sentences."
+            )
 
-        body = {'model': self.model, 'messages': normalized, 'stream': False}
+        out = [{'role': 'system', 'content': '\n\n'.join(system_parts)}]
+        out.extend(conversation)
+        return out
+
+    @staticmethod
+    def _clean_reply(text: str) -> str:
+        text = text.strip()
+        if not text:
+            return ''
+        if _OUT_OF_CHARACTER.search(text):
+            return ''
+        return text
+
+    async def generate_messages(self, messages: list[dict]) -> str:
+        body_messages = self._build_messages(messages)
+        body = {
+            'model': self.model,
+            'messages': body_messages,
+            'stream': False,
+            'options': {
+                'temperature': float(os.getenv('OLLAMA_TEMPERATURE', '0.6')),
+                'num_predict': int(os.getenv('OLLAMA_MAX_TOKENS', '120')),
+            },
+        }
+
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
@@ -62,9 +88,31 @@ class LLMProcessor:
                     timeout=120.0,
                 )
                 resp.raise_for_status()
-                return resp.json()['message']['content']
+                text = self._clean_reply(resp.json()['message']['content'])
+                if text:
+                    return text
+
+                # One retry with a stricter reminder.
+                retry_messages = body_messages + [
+                    {
+                        'role': 'user',
+                        'content': (
+                            '[Stay in character as the banking customer only. '
+                            'Reply in 2-3 sentences to what the officer just said.]'
+                        ),
+                    }
+                ]
+                resp2 = await client.post(
+                    f"{self.ollama_url}/api/chat",
+                    json={**body, 'messages': retry_messages},
+                    timeout=120.0,
+                )
+                resp2.raise_for_status()
+                text2 = self._clean_reply(resp2.json()['message']['content'])
+                return text2 or _FALLBACK
+
         except httpx.HTTPStatusError as e:
             logger.error('Ollama HTTP %s: %s', e.response.status_code, e.response.text)
         except (httpx.ConnectError, OSError) as e:
             logger.error('Ollama connection error: %s', e)
-        return "Sorry, I'm having trouble responding right now."
+        return _FALLBACK
