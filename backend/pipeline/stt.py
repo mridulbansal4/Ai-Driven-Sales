@@ -33,19 +33,38 @@ class STTProcessor:
         )
         self._initialized = True
 
-    def transcribe(self, audio_bytes: bytes) -> str:
+    def transcribe(self, audio_bytes: bytes) -> str | None:
         start = time.perf_counter()
         audio_array = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
         audio_array /= 32768.0
 
-        segments, _ = self.model.transcribe(
-            audio_array, beam_size=5, language=None
+        # If WHISPER_LANGUAGE is set to 'auto' or not set, let Whisper auto-detect.
+        # Set WHISPER_LANGUAGE=hi to force Hindi, or WHISPER_LANGUAGE=en for English.
+        env_lang = os.getenv('WHISPER_LANGUAGE', 'auto').strip().lower()
+        language = None if env_lang == 'auto' else env_lang
+
+        segments, info = self.model.transcribe(
+            audio_array,
+            language=language,          # None = auto-detect
+            task='transcribe',
+            beam_size=5,
+            temperature=0.0,
+            suppress_blank=True,
+            condition_on_previous_text=False,
+            without_timestamps=True,
+            vad_filter=False,
         )
         transcript = ''.join(seg.text for seg in segments).strip()
 
-        if not transcript or all(c in string.punctuation + ' ' for c in transcript):
-            transcript = ''
+        logger.info(
+            "STT detected language=%s (probability=%.3f)",
+            info.language,
+            info.language_probability,
+        )
 
         elapsed = time.perf_counter() - start
-        logger.info(f"STT transcribe took {elapsed:.2f}s")
+        logger.info(f"STT transcribe took {elapsed:.2f}s | lang={info.language}")
+
+        if not transcript or all(c in string.punctuation + ' ' for c in transcript):
+            return None
         return transcript

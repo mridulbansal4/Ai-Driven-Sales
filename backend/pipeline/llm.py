@@ -23,7 +23,13 @@ class LLMProcessor:
             "You are a hesitant banking customer considering a home loan. "
             "You have concerns about interest rates and monthly EMIs. "
             "Keep responses short — maximum 2-3 sentences. "
-            "Stay in character at all times."
+            "Stay in character at all times.\n\n"
+            "IMPORTANT — Language rule: "
+            "Detect the language the user spoke in (Hindi or English). "
+            "If the user spoke in Hindi (or Hinglish), reply ONLY in Hindi (Devanagari script). "
+            "If the user spoke in English, reply ONLY in English. "
+            "Never mix scripts in a single reply. "
+            "Do not translate the user's message — just respond naturally in the same language."
         )
         self._initialized = True
 
