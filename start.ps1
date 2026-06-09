@@ -39,7 +39,7 @@ if (-not (Test-Path ".venv")) { uv sync --python 3.11 }
 function Resolve-AudioDeviceId {
     param([string]$Name, [string]$Kind)
     if (-not $Name -or $Name -match '^\d+$') { return $Name }
-    $id = uv run --python 3.11 python -m pipeline.audio_devices $Name $Kind 2>&1 | Select-Object -Last 1
+    $id = uv run --python 3.11 python -m pipeline.core.audio_devices $Name $Kind 2>&1 | Select-Object -Last 1
     if ($LASTEXITCODE -ne 0) { Write-Host $id -ForegroundColor Red; exit 1 }
     return $id.ToString().Trim()
 }

@@ -61,6 +61,6 @@ def resolve_device(name_or_id: str | int, kind: str) -> int:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("usage: python -m pipeline.audio_devices <name-or-id> input|output", file=sys.stderr)
+        print("usage: python -m pipeline.core.audio_devices <name-or-id> input|output", file=sys.stderr)
         raise SystemExit(2)
     print(resolve_device(sys.argv[1], sys.argv[2]))

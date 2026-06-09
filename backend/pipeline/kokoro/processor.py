@@ -1,11 +1,16 @@
+"""Kokoro TTS processor (singleton, language-pipeline cached)."""
+
+from __future__ import annotations
+
 import io
 import logging
-import os
 import re
 import sys
 
 if sys.platform == 'win32':
-    from pipeline.cuda_env import setup_cuda_dlls  # noqa: F401
+    from pipeline.core.cuda_env import setup_cuda_dlls  # noqa: F401
+
+from pipeline.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +36,13 @@ class TTSProcessor:
     def __init__(self):
         if self._initialized:
             return
-        from pipeline.cuda_env import ensure_espeak
+        from pipeline.core.cuda_env import ensure_espeak
 
         ensure_espeak()
 
         self._voices = {
-            'a': os.getenv('KOKORO_VOICE_EN', _DEFAULT_VOICES['a']),
-            'h': os.getenv('KOKORO_VOICE_HI', _DEFAULT_VOICES['h']),
+            'a': settings.kokoro.voice_en,
+            'h': settings.kokoro.voice_hi,
         }
         self._pipelines: dict[str, object] = {}
         self._model = None  # shared KModel across language pipelines
