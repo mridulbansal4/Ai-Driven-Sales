@@ -14,6 +14,8 @@ from livekit.agents.tts import TTSCapabilities
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, APIConnectOptions
 from livekit.agents.utils import shortuuid
 
+from pipeline.a2f import get_client as get_a2f_client
+from pipeline.core.config import settings
 from pipeline.kokoro.processor import TTSProcessor
 
 logger = logging.getLogger(__name__)
@@ -27,6 +29,11 @@ class KokoroChunkedStream(tts.ChunkedStream):
         wav_bytes, sample_rate = await asyncio.to_thread(
             processor.synthesize, self._input_text
         )
+
+        # Fan out the same utterance to NVIDIA ACE Audio2Face. Fire-and-forget
+        # so a slow / unreachable A2F server can never stall LiveKit playback.
+        if settings.a2f.enabled and wav_bytes:
+            asyncio.create_task(get_a2f_client().animate(wav_bytes))
 
         output_emitter.initialize(
             request_id=shortuuid(),

@@ -82,11 +82,22 @@ class OllamaSettings:
 
 
 @dataclass(frozen=True)
+class A2FSettings:
+    enabled: bool
+    host: str
+    port: int
+    sample_rate: int       # rate ACE expects (resample Kokoro 24k -> this)
+    chunk_ms: int          # streaming chunk size in milliseconds
+    connect_timeout_s: float
+
+
+@dataclass(frozen=True)
 class Settings:
     log_level: str
     whisper: WhisperSettings
     kokoro: KokoroSettings
     ollama: OllamaSettings
+    a2f: A2FSettings
 
 
 def _load() -> Settings:
@@ -109,6 +120,14 @@ def _load() -> Settings:
             temperature=_float("OLLAMA_TEMPERATURE", 0.6),
             max_tokens=_int("OLLAMA_MAX_TOKENS", 120),
             request_timeout_s=_float("OLLAMA_TIMEOUT", 120.0),
+        ),
+        a2f=A2FSettings(
+            enabled=_bool("A2F_ENABLED", True),
+            host=_str("A2F_HOST", "192.168.1.35"),
+            port=_int("A2F_PORT", 50051),
+            sample_rate=_int("A2F_SAMPLE_RATE", 16000),
+            chunk_ms=_int("A2F_CHUNK_MS", 100),     # larger chunks = fewer awaits
+            connect_timeout_s=_float("A2F_CONNECT_TIMEOUT", 1.0),
         ),
     )
 

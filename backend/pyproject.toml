@@ -20,6 +20,9 @@ dependencies = [
     "torchaudio==2.4.1",
     "nvidia-cublas-cu12>=12.9.2.10",
     "nvidia-cudnn-cu12>=9.23.0.39",
+    "grpcio>=1.62.0",
+    "grpcio-tools>=1.62.0",
+    "protobuf>=4.25.0",
 ]
 
 [[tool.uv.index]]

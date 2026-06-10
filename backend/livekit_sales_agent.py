@@ -39,6 +39,14 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     await session.start(room=ctx.room, agent=agent)
     # on_enter fires automatically after session.start — no extra calls needed here
 
+    # Warm the A2F gRPC channel in the background. Never block startup — if
+    # the A2F server is down or slow, we want the user's first reply now.
+    import asyncio as _asyncio
+    from pipeline.a2f import get_client as get_a2f_client
+    from pipeline.core.config import settings as _settings
+    if _settings.a2f.enabled:
+        _asyncio.create_task(get_a2f_client().connect())
+
 
 if __name__ == "__main__":
     agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
